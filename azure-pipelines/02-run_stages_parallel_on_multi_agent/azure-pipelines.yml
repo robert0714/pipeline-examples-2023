@@ -1,0 +1,113 @@
+trigger:
+  - parallel_job_on_multi_agent
+parameters:
+- name: batches
+  displayName: BATCH
+  type: object
+  default:
+  - 0
+  - 1
+  - 2 
+
+variables: 
+  size: ${{ length(parameters.batches) }}  
+  vmInPool: ubuntu-latest
+  initFile: src-files/un-split.csv
+
+stages:
+- stage: spilt_file
+  pool:
+    vmImage:  $(vmInPool)
+  displayName: spilt_file
+  jobs:
+  - job: spilt_file
+    displayName: spilt_file
+    steps:
+      # Set Environment
+      - task: Bash@3
+        inputs:
+          targetType: 'inline'
+          script: |   
+            echo 'hosts '
+            cat /etc/hosts
+            
+            echo 'current path'
+            pwd
+            
+            export BUILD_NUMBER=$(Build.BuildNumber)
+            echo 'build no  #'${BUILD_NUMBER}
+            
+            timedatectl
+            echo 'set timezone to Asia/Taipei'
+            sudo timedatectl set-timezone Asia/Taipei
+            timedatectl
+            
+            echo 'target directory'
+            mkdir $(Build.SourcesDirectory)/splitFiles
+            echo $(Build.SourcesDirectory)/splitFiles
+        displayName: 'set env'
+
+      - script: |
+          sh splitByPart.sh $(initFile) $(size);
+          files=$(ls splitFiles);
+
+          echo "---------------------------------"  
+          count=0;
+          for i in $files 
+          do
+            echo "count: "  $count 
+            echo $i;
+            echo "##vso[task.setvariable variable=SPLIT_FILES;isoutput=true]$i" 
+            echo "##vso[task.setvariable variable=SPLIT_FILES2;issecret=false]$i"          
+            count=$(($count+1))
+            echo "---------------------------------"  
+          done
+
+          echo ${{ parameters.batches[0] }} 
+          echo ${{ parameters.batches[1] }} 
+          echo ${{ parameters.batches[2] }} 
+        displayName: 'DetermineFiles'
+      - script:  |   
+          echo  $(DetermineFiles.SPLIT_FILES) ;   
+          echo  $(SPLIT_FILES) ; 
+
+          echo  $(DetermineFiles.SPLIT_FILES2) ;   
+          echo  $(SPLIT_FILES2) ;  
+          count=0;
+          for i in $(DetermineFiles)
+          do
+            echo "count: "  $count 
+            echo $i;             
+            echo "---------------------------------"  
+          done
+        name: echovar  
+        
+      - task: PublishPipelineArtifact@1
+        continueOnError: true
+        inputs:
+          targetPath: $(Build.SourcesDirectory)/splitFiles
+          artifact: 'splitFiles'
+        displayName: '上傳 spiltedFiles'               
+
+- ${{ each stage in parameters.batches }}:
+  - stage: BATCH_${{ stage }} 
+    dependsOn: 
+      - spilt_file
+    jobs:
+      - job: BATCH_${{ stage }} 
+        displayName: BATCH_${{ stage }}
+        steps:
+          - task: DownloadPipelineArtifact@2
+            displayName: 'Download Pipeline Artifact'
+            inputs: 
+              artifactName: 'splitFiles'
+              targetPath: 'splitFiles' 
+              buildVersionToDownload: 'latest'              
+          - script: |
+              echo '$(initFile)-${{ stage }}'
+              myarr=($(ls .))
+              echo "${myarr[${{ stage }}]}" 
+              echo "+++++++++++++++++++++++++++++++++++" 
+              cat  ./splitFiles/$(initFile)-${{ stage }} ;
+            displayName: 'process_parallel_job_n'
+ 

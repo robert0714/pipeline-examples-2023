@@ -1,0 +1,88 @@
+trigger:
+  - master
+pool:
+  vmImage: 'ubuntu-latest'
+parameters:
+- name: size
+  displayName: size
+  type: number
+  default: '3' 
+  values:
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+- name: PAT
+  displayName: Personal Access Token
+  type: string
+  default: '7ojteixihi4cwajunkj6zckcjaw5lrmpbtjhoufknw3rpif54qdq' 
+ 
+variables: 
+  pipelineId: 42 # target pipeline
+  organization: [organization-name]
+  project: [project-name]
+  url: https://dev.azure.com/$(organization)/$(project)/_apis/pipelines/$(pipelineId)/runs?api-version=7.0
+  initFile: src-files/un-split.csv
+stages:
+- stage: spilt_file
+  displayName: spilt_file
+  jobs:
+  - job: spilt_file
+    displayName: spilt_file
+    steps: 
+      - task: Bash@3
+        inputs:
+          targetType: 'inline'
+          script: |  
+            echo 'hosts çontent'
+            cat /etc/hosts
+            
+            echo 'path'
+            pwd
+            
+            export BUILD_NUMBER=$(Build.BuildNumber)
+            echo 'build number  #'${BUILD_NUMBER}
+            
+            timedatectl
+            echo 'set timezone to Asia/Taipei'
+            sudo timedatectl set-timezone Asia/Taipei
+            timedatectl
+             
+            mkdir $(Build.SourcesDirectory)/splitFiles
+            echo $(Build.SourcesDirectory)/splitFiles
+        displayName: 'set env'
+
+      - script: |
+          sh splitByPart.sh $(initFile) ${{ parameters.size }}
+        displayName: 'spilt file'
+        
+      - task: PublishPipelineArtifact@1
+        continueOnError: true
+        inputs:
+          targetPath: $(Build.SourcesDirectory)/splitFiles 
+          artifact: 'splitFiles '
+        displayName: 'upload spiltedFiles'
+
+      - script: |
+          echo $(url) ;
+          files=$(ls $(Build.SourcesDirectory)/splitFiles )
+          for i in $files;
+          do
+            echo "---------------------------------"      
+            echo $i;      
+            CURL_DATA='{ 
+                        "previewRun" : "false", 
+                        "templateParameters": {   
+                           "TARGET": "'$i'" 
+                        }    
+                 }';
+            echo "================================="      
+            echo "$CURL_DATA" | jq '.';
+
+            curl -X POST  $(url)  \
+              -H "Content-Type: application/json"  \
+              -d "$CURL_DATA"  \
+              --user "login:${{ parameters.PAT }}";
+          done
+        displayName: 'api-call-pipeline' 

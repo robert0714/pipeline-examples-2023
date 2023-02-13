@@ -1,0 +1,64 @@
+trigger:
+  - jsonArrayDataTriggerPipeline
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  initFile: src-files/un-split.csv
+  size: 3
+  PAT: 7ojteixihi4cwajunkj6zckcjaw5lrmpbtjhoufknw3rpif54qdq   
+  pipelineId: 43 # target pipeline
+  organization: [organization-name]
+  project:  [project-name]
+  url: https://dev.azure.com/$(organization)/$(project)/_apis/pipelines/$(pipelineId)/runs?api-version=7.0
+
+stages:
+- stage: spilt_file
+  displayName: spilt_file
+  jobs:
+  - job: spilt_file
+    displayName: spilt_file
+    timeoutInMinutes: 360 # how long to run the job before automatically cancelling
+    steps:
+      # 主機環境設定
+      - task: Bash@3
+        inputs:
+          targetType: 'inline'
+          script: |
+            timedatectl
+            echo 'set timezone to Asia/Taipei'
+            sudo timedatectl set-timezone Asia/Taipei
+            timedatectl
+            
+            echo '產生結果放置的目錄'
+            mkdir $(Build.SourcesDirectory)/splitFiles
+            echo $(Build.SourcesDirectory)/splitFiles
+        displayName: 'set env'
+
+      - script: |
+          sh splitByPart.sh  $(initFile) $(size)
+        displayName: 'spilt file'
+        
+      - task: PublishPipelineArtifact@1
+        continueOnError: true
+        inputs:
+          targetPath: $(Build.SourcesDirectory)/splitFiles 
+          artifact: 'splitFiles '
+        displayName: '上傳 spiltedFiles'
+
+      - script: |
+          echo $(url) ; 
+          files=($(ls $(Build.SourcesDirectory)/splitFiles )) # convert to array
+
+          data=$(jq --compact-output --null-input '$ARGS.positional' --args -- "${files[@]}") ;
+          echo $data;    
+          echo "====================================================================";  
+          CURL_DATA='{  "previewRun" : "false",  "templateParameters": { "TARGET": '$data' } }' ; 
+          echo "$CURL_DATA" | jq '.';  
+          echo "---------------------------------";
+          curl -X POST  $(url)  \
+              -H "Content-Type: application/json"  \
+              -d "$CURL_DATA"  \
+              --user "login:$(PAT)";
+                        
+        displayName: 'api-call-pipeline' 

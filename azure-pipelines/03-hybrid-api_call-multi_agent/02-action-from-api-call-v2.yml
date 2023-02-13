@@ -1,0 +1,60 @@
+parameters:
+- name: TARGET
+  displayName: A parameter
+  default: []
+  type: object  
+
+variables: 
+  pipelineId: 40 # id of another pipeline 
+  project: [project-name]
+
+trigger:
+- none
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+stages:
+- stage: debug_variable
+  displayName: debug_variable
+  jobs:
+  - job: debug_variable
+    displayName: debug_variable
+    steps: 
+      - task: Bash@3
+        inputs:
+          targetType: 'inline'
+          script: |            
+            echo  " test"
+        displayName: 'set env'
+        continueOnError: true
+      - checkout: none
+      - ${{ if eq(length(parameters.TARGET), 0) }}:
+        - script: echo TARGET is empty
+          displayName: TARGET is empty    
+      - ${{ each p in parameters.TARGET }}:
+        - bash: |            
+           echo ---------- ${{ p }} ---------------
+            
+          displayName: 'for loop '
+          continueOnError: true
+
+- ${{ each stage in parameters.TARGET }}:
+  - stage: BATCH_${{ stage }} 
+    dependsOn: 
+      - debug_variable
+    jobs:
+      - job: BATCH_${{ stage }}_download_file        
+        displayName: BATCH_${{ stage }}_download_file
+        timeoutInMinutes: 360 # how long to run the job before automatically cancelling
+        steps:
+          - task: DownloadPipelineArtifact@2
+            displayName: 'Download Pipeline Artifact'
+            inputs: 
+              artifactName: 'splitFiles'
+              targetPath: 'splitFiles' 
+              buildVersionToDownload: 'latest'              
+          - script: |
+              echo '${{ stage }}'               
+              cat  ./splitFiles/${{ stage }} ;
+            displayName: 'process_parallel_job_n' 

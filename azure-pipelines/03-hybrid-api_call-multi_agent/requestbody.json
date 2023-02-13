@@ -1,0 +1,6 @@
+{
+    "previewRun" : "false",
+    "templateParameters": {
+        "TARGET": "Test"
+    } 
+}

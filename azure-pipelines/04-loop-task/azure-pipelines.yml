@@ -1,0 +1,53 @@
+trigger:
+  - master
+
+pool:
+  vmImage: 'ubuntu-latest'
+# pool: 
+#   name: 'default'
+#   vmImage: 'D210641SVR01'
+variables:
+  MAVEN_CACHE_FOLDER: $(Pipeline.Workspace)/.m2/repository
+  MAVEN_OPTS: "-Dmaven.repo.local=$(MAVEN_CACHE_FOLDER)"
+  
+
+steps:
+  - task: Cache@2
+    inputs:
+      key: 'maven | "$(Agent.OS)" | **/pom.xml'
+      restoreKeys: |
+        maven | "$(Agent.OS)"
+        maven
+      path: $(MAVEN_CACHE_FOLDER)
+    displayName: Cache Maven local repo
+ 
+  - task: Bash@3
+    inputs:
+      targetType: "inline"
+      script: |        
+        sudo -- sh -c "echo '192.168.18.30     registry.apps.ocp.test' >> /etc/hosts"
+        sudo -- sh -c "echo '{\"insecure-registries\" : [\"default-route-openshift-image-registry.apps.ocp.iisi.test\"]}' > /etc/docker/daemon.json"
+
+        cat /etc/hosts 
+        pwd
+         
+        export BUILD_NUMBER=$(Build.BuildNumber)
+        echo 'build number  #'${BUILD_NUMBER}
+
+        timedatectl
+        echo 'set timezone to Asia/Taipei'
+        sudo timedatectl set-timezone Asia/Taipei
+        timedatectl
+
+        echo 'inspect docker daemon'
+        cat /etc/docker/daemon.json
+        sudo systemctl restart docker
+        sudo systemctl daemon-reload
+    displayName: "set env"
+    continueOnError: true  #This code in self-hosted agent  will be 
+    
+  - template: template.yml
+    parameters:
+      param: ["T1","T2","T3"]
+  - script: 'echo  test finish'
+

@@ -1,0 +1,41 @@
+parameters:
+- name: TARGET
+  displayName: A parameter
+  default: noValue
+  type: string
+
+variables: 
+  pipelineId: 40 # id of another pipeline 
+  project: [project-name]
+
+trigger:
+- none
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+stages:
+- stage: action_from_api_call
+  displayName: action_from_api_call
+  jobs:
+  - job: action_from_api_call
+    displayName: action_from_api_call
+    timeoutInMinutes: 360 # how long to run the job before automatically cancelling
+    steps:
+      - task: DownloadPipelineArtifact@2
+        displayName: 'Download Pipeline Artifact'
+        inputs:
+          buildType: 'specific'
+          project: $(project)
+          artifactName: 'splitFiles'
+          targetPath: 'splitFiles'
+          definition: $(pipelineId)
+          buildVersionToDownload: 'latest' 
+      - script: |
+          echo "variable: " ;
+          echo ${{parameters.TARGET}} ;           
+          pwd ;
+          ls -la  ./splitFiles/${{parameters.TARGET}} ;
+          echo "=================================" ;
+          cat  ./splitFiles/${{parameters.TARGET}} ;
+        displayName: 'catch the variable and execute the specific process'
